@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EmotionSense — Emotion Detection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --card: #16161f;
+      --border: #2a2a3a;
+      --accent: #7c5cff;
+      --accent2: #ff5ca8;
+      --accent3: #5cffb8;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --angry: #ff4d4d;
+      --happy: #ffd700;
+      --sad: #4d9fff;
+      --neutral: #a0a0b0;
+      --fearful: #b44dff;
+      --disgusted: #4dff8f;
+      --surprised: #ff9f4d;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob { position: fixed; border-radius: 50%; filter: blur(120px); opacity: 0.07; pointer-events: none; z-index: 0; }
+    .blob-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; left: -200px; }
+    .blob-2 { width: 500px; height: 500px; background: var(--accent2); bottom: -100px; right: -100px; }
+    .wrapper { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    header { padding: 40px 0 20px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+    .logo span { color: var(--accent); }
+    .badge { font-size: 11px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 100px; color: var(--muted); letter-spacing: 1px; }
+    .tab-row { display: flex; gap: 8px; margin: 32px 0 28px; }
+    .tab-btn { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; padding: 10px 22px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.2s; }
+    .tab-btn:hover { color: var(--text); border-color: var(--accent); }
+    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .tab-btn.active-cnn { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+    .tab-panel { display: none; }
+    .tab-panel.visible { display: block; }
+    .upload-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 24px; transition: border-color 0.3s; }
+    .upload-card:hover { border-color: var(--accent); }
+    .upload-card.cnn:hover { border-color: var(--accent2); }
+    .upload-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .upload-sub { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+    .file-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .file-input-wrap { position: relative; flex: 1; min-width: 200px; }
+    .file-input-wrap input[type="file"] { position: absolute; opacity: 0; inset: 0; cursor: pointer; width: 100%; height: 100%; }
+    .file-display { background: var(--surface); border: 1px dashed var(--border); border-radius: 10px; padding: 12px 16px; font-size: 13px; color: var(--muted); cursor: pointer; transition: border-color 0.2s, color 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-input-wrap:hover .file-display { border-color: var(--accent); color: var(--text); }
+    .btn { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; padding: 12px 28px; border-radius: 10px; border: none; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #6848e8; transform: translateY(-1px); }
+    .btn-cnn { background: var(--accent2); color: #fff; }
+    .btn-cnn:hover { background: #e84898; transform: translateY(-1px); }
+    .btn-live { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .btn-live:hover { border-color: var(--accent3); color: var(--accent3); }
+    .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; animation: fadeUp 0.4s ease; }
+    @media (max-width: 700px) { .result-grid { grid-template-columns: 1fr; } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .img-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .img-card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .dot.input { background: var(--accent); }
+    .dot.output { background: var(--accent3); }
+    .dot.output-cnn { background: var(--accent2); }
+    .img-card img { width: 100%; display: block; object-fit: cover; max-height: 320px; }
+    .emotion-result { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px 28px; margin-bottom: 24px; display: flex; align-items: center; gap: 20px; animation: fadeUp 0.5s ease; }
+    .emotion-emoji { font-size: 48px; }
+    .emotion-info { flex: 1; }
+    .emotion-name { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+    .emotion-model { font-size: 12px; color: var(--muted); }
+    .error-box { background: rgba(255,77,77,0.08); border: 1px solid rgba(255,77,77,0.3); border-radius: 12px; padding: 14px 18px; font-size: 13px; color: #ff4d4d; margin-bottom: 20px; }
+    .live-row { display: flex; gap: 12px; align-items: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .live-label { font-size: 12px; color: var(--muted); }
+    footer { margin-top: 60px; padding: 24px 0; border-top: 1px solid var(--border); text-align: center; font-size: 12px; color: var(--muted); }
+    .spinner-wrap { display: none; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin-top: 12px; }
+    .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .emo-Angry, .emo-angry { color: var(--angry); }
+    .emo-Happy, .emo-happy { color: var(--happy); }
+    .emo-Sad, .emo-sad { color: var(--sad); }
+    .emo-Neutral, .emo-neutral { color: var(--neutral); }
+    .emo-Fearful, .emo-fearful, .emo-fear { color: var(--fearful); }
+    .emo-Disgusted, .emo-disgusted, .emo-disgust { color: var(--disgusted); }
+    .emo-Surprised, .emo-surprised, .emo-surprise { color: var(--surprised); }
+  </style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="wrapper">
+    <header>
+      <div class="logo">Emotion<span>Sense</span></div>
+      <div class="badge">EMOTION DETECTION v2.0</div>
+    </header>
+
+    <div class="tab-row">
+      <button class="tab-btn active" id="btn-deepface" onclick="switchTab('deepface', this)">DeepFace Model</button>
+      <button class="tab-btn" id="btn-cnn" onclick="switchTab('cnn', this)">CNN Model</button>
+    </div>
+
+    <!-- ═══ DEEPFACE TAB ═══ -->
+    <div id="tab-deepface" class="tab-panel visible">
+      {% if error and not image4 %}
+      <div class="error-box">&#9888; {{ error }}</div>
+      {% endif %}
+
+      <div class="upload-card">
+        <div class="upload-title">DeepFace Emotion Analysis</div>
+        <div class="upload-sub">Upload a photo — DeepFace will detect all faces and their emotions using pre-trained FER weights</div>
+        <form action="/analyse" method="post" enctype="multipart/form-data" onsubmit="showSpinner('sp1')">
+          <div class="file-row">
+            <div class="file-input-wrap">
+              <input type="file" name="file" accept="image/*" required onchange="updateLabel(this,'lbl1')">
+              <div class="file-display" id="lbl1">&#128193; Choose an image file...</div>
+            </div>
+            <button type="submit" class="btn btn-primary">Analyse &#8594;</button>
+          </div>
+          <div class="spinner-wrap" id="sp1">
+            <div class="spinner"></div> Analysing with DeepFace...
+          </div>
+        </form>
+        <div class="live-row">
+          <span class="live-label">Or use your webcam:</span>
+          <a href="/Live" class="btn btn-live">&#9654; Start Live Detection</a>
+        </div>
+      </div>
+
+      {% if image2 %}
+      <div class="emotion-result">
+        <div class="emotion-emoji">{{ emoji }}</div>
+        <div class="emotion-info">
+          <div class="emotion-name emo-{{ emotion }}">{{ emotion | title }}</div>
+          <div class="emotion-model">Detected by DeepFace · OpenCV backend · FER+ weights</div>
+        </div>
+      </div>
+      <div class="result-grid">
+        <div class="img-card">
+          <div class="img-card-header"><div class="dot input"></div> Input Image</div>
+          <img src="{{ image1 }}" alt="Input">
+        </div>
+        <div class="img-card">
+          <div class="img-card-header"><div class="dot output"></div> Output — Annotated</div>
+          <img src="{{ image2 }}" alt="Output">
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- ═══ CNN TAB ═══ -->
+    <div id="tab-cnn" class="tab-panel">
+      {% if error and not image2 %}
+      <div class="error-box">&#9888; {{ error }}</div>
+      {% endif %}
+
+      <div class="upload-card cnn">
+        <div class="upload-title">CNN Emotion Classifier</div>
+        <div class="upload-sub">Custom-trained CNN — 7 emotion classes: Angry, Disgusted, Fearful, Happy, Neutral, Sad, Surprised</div>
+        <form action="/analyse1" method="post" enctype="multipart/form-data" onsubmit="showSpinner('sp2')">
+          <div class="file-row">
+            <div class="file-input-wrap">
+              <input type="file" name="file" accept="image/*" required onchange="updateLabel(this,'lbl2')">
+              <div class="file-display" id="lbl2">&#128193; Choose an image file...</div>
+            </div>
+            <button type="submit" class="btn btn-cnn">Analyse &#8594;</button>
+          </div>
+          <div class="spinner-wrap" id="sp2">
+            <div class="spinner" style="border-top-color:var(--accent2)"></div> Running CNN inference...
+          </div>
+        </form>
+        <div class="live-row">
+          <span class="live-label">Or use your webcam:</span>
+          <a href="/Live11" class="btn btn-live">&#9654; Start Live Detection</a>
+        </div>
+      </div>
+
+      {% if image4 %}
+      <div class="emotion-result">
+        <div class="emotion-emoji">{{ emoji_cnn }}</div>
+        <div class="emotion-info">
+          <div class="emotion-name emo-{{ emotion_cnn }}">{{ emotion_cnn | title }}</div>
+          <div class="emotion-model">Detected by Custom CNN · emotion_model.h5 · 48×48 grayscale input</div>
+        </div>
+      </div>
+      <div class="result-grid">
+        <div class="img-card">
+          <div class="img-card-header"><div class="dot input"></div> Input Image</div>
+          <img src="{{ image3 }}" alt="Input">
+        </div>
+        <div class="img-card">
+          <div class="img-card-header"><div class="dot output-cnn"></div> Output — Annotated</div>
+          <img src="{{ image4 }}" alt="Output">
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <footer>EmotiSense &middot; DeepFace + Custom CNN &middot; Built with Flask &amp; OpenCV</footer>
+  </div>
+
+  <script>
+    function switchTab(name, btn) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('visible'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active','active-cnn'));
+      document.getElementById('tab-'+name).classList.add('visible');
+      btn.classList.add(name === 'cnn' ? 'active-cnn' : 'active');
+    }
+    function updateLabel(input, labelId) {
+      const label = document.getElementById(labelId);
+      if (input.files && input.files[0]) {
+        label.textContent = '\u2713 ' + input.files[0].name;
+        label.style.color = 'var(--text)';
+        label.style.borderColor = 'var(--accent3)';
+        label.style.borderStyle = 'solid';
+      }
+    }
+    function showSpinner(id) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'flex';
+    }
+    // Auto-switch to CNN tab if CNN result is present
+    {% if image4 %}
+    document.addEventListener('DOMContentLoaded', () => {
+      switchTab('cnn', document.getElementById('btn-cnn'));
+    });
+    {% endif %}
+  </script>
+</body>
+</html>
